@@ -36,6 +36,10 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+typedef enum CRC_RET{
+	VERIFY_CRC_SUCCESS = 0,
+	VERIFY_CRC_FAIL = 1
+}CRC_RET;
 
 /* USER CODE END ET */
 
@@ -53,14 +57,21 @@ extern "C" {
 #define BL_GET_VER 	0x51
 #define BL_GET_HELP 0x52
 
+#define BL_ACK 	0xA5
+#define BL_NACK 0x7F
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-void BL_handle_getver_cmd(uint8_t *bl_rx_buffer);
-void BL_handle_gethelp_cmd(uint8_t *bl_rx_buffer);
+void BL_handle_getver_cmd(uint8_t *pBuffer);
+void BL_handle_gethelp_cmd(uint8_t *pBuffer);
+void BL_send_ack(uint8_t cmd, uint8_t follow_len);
+void BL_send_nack(void);
+void BL_uart_write_data(uint8_t *pBuffer, uint32_t len);
+uint8_t BL_get_version(void);
+CRC_RET BL_verify_crc(uint8_t *pBuffer, uint32_t len, uint32_t crc_host);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

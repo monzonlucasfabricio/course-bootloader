@@ -48,6 +48,7 @@
 #define D_UART &huart2
 #define C_UART &huart3
 #define BL_RX_LEN 200
+#define BL_VERSION 0xAA
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -199,8 +200,9 @@ void BL_uart_read_data(void){
 		HAL_UART_Receive(C_UART, bl_rx_buffer, 1, HAL_MAX_DELAY);
 		rcv_len = bl_rx_buffer[0];
 
-		// Read the command code
+		// Read the command code + CRC
 		HAL_UART_Receive(C_UART, &bl_rx_buffer[1], rcv_len, HAL_MAX_DELAY);
+
 		switch(bl_rx_buffer[1])
 		{
 			case BL_GET_VER:
@@ -219,7 +221,7 @@ void BL_jump_to_app(void)
 	/* Function to hold the address of reset handler of the user app */
 	void (*app_reset_handler)(void);
 
-	print_debug_msg("Bootloader -> Jump to user app\r\n");
+	print_debug_msg("BL_DEBUG_MSG -> Jump to user app\r\n");
 
 	/* Main Stack Pointer */
 	uint32_t msp_value = *(volatile uint32_t *)FLASH_APP_BASE_ADDRESS;
@@ -241,17 +243,114 @@ void BL_jump_to_app(void)
 
 }
 
-void BL_handle_getver_cmd(uint8_t *bl_rx_buffer)
+void BL_handle_getver_cmd(uint8_t *pBuffer)
 {
+	uint8_t bl_version;
+
+//	print_debug_msg("BL_DEBUG_MSG: BL_handle_getver_cmd\n");
+
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get CRC32 sent by the host
+	// |		1B     	  | 1B  |  1B  |  1B  |  1B  |  1B  |
+	// | Length to follow | CMD | CRC1 | CRC2 | CRC3 | CRC4 |
+	// |                  |     | Cast 4 uint8_t to 1 uint32_t and dereference
+	uint32_t host_crc = *((uint32_t *) (pBuffer + cmd_packet_len - 4));
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Send ACK
+		BL_send_ack(pBuffer[0], 1);
+
+		bl_version = BL_get_version();
+		print_debug_msg("BL_DEBUG_MSG: BL_VERSION : %d %#x \n", bl_version, bl_version);
+
+		BL_uart_write_data(&bl_version,1);
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
 
 }
 
 
-void BL_handle_gethelp_cmd(uint8_t *bl_rx_buffer)
+void BL_handle_gethelp_cmd(uint8_t *pBuffer)
 {
 
+}
+
+/**
+ * @brief This function verifies the checksum number
+ *
+ */
+CRC_RET BL_verify_crc(uint8_t *pData, uint32_t len, uint32_t crc_host)
+{
+	uint32_t uwCRCValue = 0xff;
+	for(uint32_t i=0; i < len; i++)
+	{
+		uint32_t i_data = pData[i];
+		uwCRCValue = HAL_CRC_Accumulate(&hcrc, &i_data, 1);
+	}
+
+	 __HAL_CRC_DR_RESET(&hcrc);
+
+	if (uwCRCValue == crc_host)
+	{
+		return VERIFY_CRC_SUCCESS;
+	}
+
+	return VERIFY_CRC_FAIL;
+}
+
+
+/**
+  * @brief This function will send an ACK + 1Byte
+  *
+  * | ACK = 0xA5 | Follow length for the reply |
+  *
+  */
+void BL_send_ack(uint8_t cmd, uint8_t follow_len)
+{
+	uint8_t ack_buf[2];
+	ack_buf[0] = BL_ACK;
+	ack_buf[1] = follow_len;
+	HAL_UART_Transmit(C_UART, ack_buf, 2, HAL_MAX_DELAY);
+}
+
+
+/**
+  * @brief This function will send an NACK
+  *
+  * | NACK = 0x7F |
+  *
+  */
+void BL_send_nack(void)
+{
+	uint8_t nack = BL_NACK;
+	HAL_UART_Transmit(C_UART, &nack, 1, HAL_MAX_DELAY);
+}
+
+
+uint8_t BL_get_version(void)
+{
+	return BL_VERSION;
+}
+
+/**
+ * @brief This function is a wrapper of UART Transmit function
+ */
+void BL_uart_write_data(uint8_t *pBuffer, uint32_t len)
+{
+	HAL_UART_Transmit(C_UART, pBuffer, len, HAL_MAX_DELAY);
 }
 /* USER CODE END 4 */
+
 
 /**
   * @brief  This function is executed in case of error occurrence.
