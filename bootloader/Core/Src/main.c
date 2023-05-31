@@ -69,6 +69,11 @@ char somedata[] = "Hello from Bootloader\r\n";
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 uint8_t bl_rx_buffer[BL_RX_LEN];
+
+uint8_t supported_cmd[] = {
+		BL_GET_VER,
+		BL_GET_HELP
+};
 /* USER CODE END 0 */
 
 /**
@@ -190,7 +195,7 @@ void print_debug_msg(char *format,...){
  */
 void BL_uart_read_data(void){
 	uint8_t rcv_len = 0;
-
+	HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
 	while(1)
 	{
 		// Set the buffer in 0
@@ -247,16 +252,11 @@ void BL_handle_getver_cmd(uint8_t *pBuffer)
 {
 	uint8_t bl_version;
 
-//	print_debug_msg("BL_DEBUG_MSG: BL_handle_getver_cmd\n");
-
 	// Get total length of cmd packet
 	uint32_t cmd_packet_len = pBuffer[0] + 1;
 
-	// Get CRC32 sent by the host
-	// |		1B     	  | 1B  |  1B  |  1B  |  1B  |  1B  |
-	// | Length to follow | CMD | CRC1 | CRC2 | CRC3 | CRC4 |
-	// |                  |     | Cast 4 uint8_t to 1 uint32_t and dereference
-	uint32_t host_crc = *((uint32_t *) (pBuffer + cmd_packet_len - 4));
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
 
 	// Check the CRC
 	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
@@ -279,9 +279,40 @@ void BL_handle_getver_cmd(uint8_t *pBuffer)
 
 }
 
+uint32_t get_host_crc(uint8_t *pBuffer){
+
+	// Get CRC32 sent by the host
+	// |		1B     	  | 1B  |  1B  |  1B  |  1B  |  1B  |
+	// | Length to follow | CMD | CRC1 | CRC2 | CRC3 | CRC4 |
+	// |                  |     | Cast 4 uint8_t to 1 uint32_t and dereference
+
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+	return *((uint32_t *) (pBuffer + cmd_packet_len - 4));
+}
+
 
 void BL_handle_gethelp_cmd(uint8_t *pBuffer)
 {
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Send ACK
+		BL_send_ack(pBuffer[0], sizeof(supported_cmd));
+		BL_uart_write_data(supported_cmd,sizeof(supported_cmd));
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
 
 }
 

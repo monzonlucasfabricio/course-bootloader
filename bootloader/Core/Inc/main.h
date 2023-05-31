@@ -41,6 +41,8 @@ typedef enum CRC_RET{
 	VERIFY_CRC_FAIL = 1
 }CRC_RET;
 
+
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -72,6 +74,9 @@ void BL_send_nack(void);
 void BL_uart_write_data(uint8_t *pBuffer, uint32_t len);
 uint8_t BL_get_version(void);
 CRC_RET BL_verify_crc(uint8_t *pBuffer, uint32_t len, uint32_t crc_host);
+
+
+uint32_t get_host_crc(uint8_t *pBuffer);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
