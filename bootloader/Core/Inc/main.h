@@ -53,13 +53,19 @@ typedef enum CRC_RET{
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
 #define BL_DEBUG_MSG_EN
-#define FLASH_BL_BASE_ADDRESS 0x8000000U
-#define FLASH_APP_BASE_ADDRESS 0x8008000U
+#define RAM_START_ADDR 			0x20000000U
+#define RAM_BASE_SIZE 			192*1024
+#define RAM_END_ADDR			(RAM_START_ADDR + RAM_BASE_SIZE)
+#define FLASH_BL_BASE_ADDRESS 	0x8000000U
+#define FLASH_APP_BASE_ADDRESS 	0x8008000U
+#define FLASH_BASE_SIZE			2000*1024
+#define FLASH_END_ADDR			(FLASH_BL_BASE_ADDRESS + FLASH_BASE_SIZE)
 
 #define BL_GET_VER 			0x51
 #define BL_GET_HELP 		0x52
 #define BL_GET_CID			0x53
 #define BL_GET_RDP			0x54
+#define BL_GO_TO			0x55
 #define BL_JUMP_TO_APP		0x5E
 
 #define BL_ACK 	0xA5
@@ -75,6 +81,7 @@ void BL_handle_gethelp_cmd(uint8_t *pBuffer);
 void BL_handle_getcid_cmd(uint8_t *pBuffer);
 void BL_handle_jump_to_app(uint8_t *pBuffer);
 void BL_handle_getrdp_cmd(uint8_t *pBuffer);
+void BL_handle_go_cmd(uint8_t *pBuffer);
 void BL_send_ack(uint8_t cmd, uint8_t follow_len);
 void BL_send_nack(void);
 void BL_uart_write_data(uint8_t *pBuffer, uint32_t len);

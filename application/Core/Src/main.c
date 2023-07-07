@@ -17,6 +17,10 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <stdarg.h>
+#include <string.h>
+#include <stdio.h>
+
 #include "main.h"
 #include "crc.h"
 #include "usart.h"
@@ -49,7 +53,10 @@
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+#define APP_DEBUG_MSG_EN
+#define D_UART &huart2
 void SystemClock_Config(void);
+static void print_debug_msg(char *format,...);
 /* USER CODE BEGIN PFP */
 char userdata[] = "Hello from user application\r\n";
 /* USER CODE END PFP */
@@ -95,6 +102,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  print_debug_msg("Hello from APP \r\n");
   while (1)
   {
     /* USER CODE END WHILE */
@@ -167,6 +175,21 @@ void Error_Handler(void)
   {
   }
   /* USER CODE END Error_Handler_Debug */
+}
+
+
+/* Print formatted string to console over uart */
+void print_debug_msg(char *format,...){
+
+#ifdef APP_DEBUG_MSG_EN
+	char str[80];
+
+	/* Extract the argument list using VA apis */
+	va_list args;
+	va_start(args, format);
+	vsprintf(str, format, args);
+	HAL_UART_Transmit(D_UART, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+#endif
 }
 
 #ifdef  USE_FULL_ASSERT

@@ -65,6 +65,8 @@ void BL_uart_read_data(void);
 void BL_jump_to_app(void);
 uint16_t get_mcu_chip_id(void);
 uint8_t get_rdp_level(void);
+uint8_t verify_address(uint32_t address);
+void Jump_To(uint32_t address);
 char somedata[] = "Hello from Bootloader\r\n";
 /* USER CODE END PFP */
 
@@ -77,6 +79,7 @@ uint8_t supported_cmd[] = {
 		BL_GET_HELP,
 		BL_GET_CID,
 		BL_GET_RDP,
+		BL_GO_TO,
 		BL_JUMP_TO_APP
 };
 /* USER CODE END 0 */
@@ -231,6 +234,9 @@ void BL_uart_read_data(void){
 				break;
 			case BL_GET_RDP:
 				BL_handle_getrdp_cmd(bl_rx_buffer);
+				break;
+			case BL_GO_TO:
+				BL_handle_go_cmd(bl_rx_buffer);
 				break;
 		}
 	}
@@ -407,7 +413,7 @@ void BL_handle_getrdp_cmd(uint8_t *pBuffer)
 	{
 		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
 
-		// Get CHIP ID
+		// Get Flash read protection level
 		uint8_t rdp = get_rdp_level();
 
 		// Send ACK
@@ -422,6 +428,81 @@ void BL_handle_getrdp_cmd(uint8_t *pBuffer)
 
 }
 
+void BL_handle_go_cmd(uint8_t *pBuffer)
+{
+	uint32_t address;
+	uint8_t valid = 0;
+	uint8_t invalid = 1;
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Example of value in memory uint8_t	->  	&pBuffer[0] = 0x20000400	0x05
+		//												&pBuffer[1] = 0x20000401	0x06
+		//												&pBuffer[2] = 0x20000402	0x80
+		//												&pBuffer[3] = 0x20000403	0x00
+		//												&pBuffer[4] = 0x20000404	0x08
+		//												&pBuffer[5] = 0x20000405	0x10
+		// pBuffer[2] = 0x80
+		// &pBuffer[2] = 0x20000402
+		// *((uint32_t *) &pBuffer[2]) = 0x80000810
+
+		address = *((uint32_t *) &pBuffer[2]);
+		print_debug_msg("BL_DEBUG_MSG: Go address -> %#x\n",address);
+
+		if (verify_address(address)){
+			// Send ACK
+			print_debug_msg("BL_DEBUG_MSG: Address is valid \n");
+			BL_send_ack(pBuffer[0], sizeof(supported_cmd));
+			BL_uart_write_data(&valid,1);
+			Jump_To(address);
+		}
+		else{
+			print_debug_msg("BL_DEBUG_MSG: Address is valid \n");
+			BL_uart_write_data(&invalid,1);
+		}
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
+
+}
+
+void Jump_To(uint32_t address)
+{
+	// Make T bit = 1
+	address += 1;
+	void (*jump)(void) = (void *) address;
+	jump();
+}
+
+uint8_t verify_address(uint32_t address)
+{
+	/* Valid addresses:
+	 * - System Memory
+	 * - SRAM1
+	 * - SRAM2
+	 * - BACKUP SRAM
+	 * - EXTERNAL MEMORY
+	 */
+	if (address >= FLASH_BL_BASE_ADDRESS && address <= FLASH_END_ADDR)
+	{
+		return 1;
+	}
+	else if (address >= RAM_START_ADDR && address <= RAM_END_ADDR){
+		return 1;
+	}
+	return 0;
+}
 
 uint16_t get_mcu_chip_id(void)
 {
@@ -431,9 +512,14 @@ uint16_t get_mcu_chip_id(void)
 	return cid;
 }
 
+
+/**
+ *  @brief 	This method will read the Flash Protection Level
+ */
 uint8_t get_rdp_level(void)
 {
 	uint8_t rdp_status = 0;
+	// It uses the raw value of the address and not the APIs.
 	volatile uint32_t *pOB_addr = (uint32_t*) 0x1FFFC000;
 	rdp_status = (uint8_t)(*pOB_addr >> 8);
 	return rdp_status;
