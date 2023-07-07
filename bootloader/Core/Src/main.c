@@ -63,6 +63,7 @@ void SystemClock_Config(void);
 static void print_debug_msg(char *format,...);
 void BL_uart_read_data(void);
 void BL_jump_to_app(void);
+uint16_t get_mcu_chip_id(void);
 char somedata[] = "Hello from Bootloader\r\n";
 /* USER CODE END PFP */
 
@@ -72,7 +73,8 @@ uint8_t bl_rx_buffer[BL_RX_LEN];
 
 uint8_t supported_cmd[] = {
 		BL_GET_VER,
-		BL_GET_HELP
+		BL_GET_HELP,
+		BL_GET_CID
 };
 /* USER CODE END 0 */
 
@@ -111,6 +113,8 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   print_debug_msg("Hello from Bootloader \r\n");
+
+
   if ( HAL_GPIO_ReadPin(USER_Btn_GPIO_Port,USER_Btn_Pin) == GPIO_PIN_SET)
   {
 	  print_debug_msg("User button is pressed -> Jumping to BL mode\r\n");
@@ -216,6 +220,9 @@ void BL_uart_read_data(void){
 			case BL_GET_HELP:
 				BL_handle_gethelp_cmd(bl_rx_buffer);
 				break;
+			case BL_GET_CID:
+				BL_handle_getcid_cmd(bl_rx_buffer);
+				break;
 		}
 	}
 }
@@ -314,6 +321,52 @@ void BL_handle_gethelp_cmd(uint8_t *pBuffer)
 		BL_send_nack();
 	}
 
+}
+
+void BL_handle_getcid_cmd(uint8_t *pBuffer)
+{
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Get CHIP ID
+		uint16_t cid = get_mcu_chip_id();
+
+		// Send ACK
+		BL_send_ack(pBuffer[0], sizeof(supported_cmd));
+
+		// Casting to (uint8_t *) because is a 16bits number
+		// &cid -> memory address of cid (uint16_t *): 		0x0800000 1234
+		// 													0x0800002 0001
+		//
+		// Depending on endianess
+		// (uint8_t*) &cid -> Casting to uint8_t *			0x0800000 34
+		//													0x0800001 12
+		//													0x0800002 01
+		//													0x0800003 00
+		BL_uart_write_data((uint8_t *)&cid,2);
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
+
+}
+
+uint16_t get_mcu_chip_id(void)
+{
+	uint16_t cid;
+	// This CID identifies the MCU part number and DIE revision.
+	cid = (uint16_t)(DBGMCU->IDCODE) & 0x0FFF;
+	return cid;
 }
 
 /**
