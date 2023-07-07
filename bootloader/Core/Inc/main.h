@@ -59,6 +59,7 @@ typedef enum CRC_RET{
 #define BL_GET_VER 			0x51
 #define BL_GET_HELP 		0x52
 #define BL_GET_CID			0x53
+#define BL_GET_RDP			0x54
 #define BL_JUMP_TO_APP		0x5E
 
 #define BL_ACK 	0xA5
@@ -73,6 +74,7 @@ void BL_handle_getver_cmd(uint8_t *pBuffer);
 void BL_handle_gethelp_cmd(uint8_t *pBuffer);
 void BL_handle_getcid_cmd(uint8_t *pBuffer);
 void BL_handle_jump_to_app(uint8_t *pBuffer);
+void BL_handle_getrdp_cmd(uint8_t *pBuffer);
 void BL_send_ack(uint8_t cmd, uint8_t follow_len);
 void BL_send_nack(void);
 void BL_uart_write_data(uint8_t *pBuffer, uint32_t len);

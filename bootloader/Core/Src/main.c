@@ -64,6 +64,7 @@ static void print_debug_msg(char *format,...);
 void BL_uart_read_data(void);
 void BL_jump_to_app(void);
 uint16_t get_mcu_chip_id(void);
+uint8_t get_rdp_level(void);
 char somedata[] = "Hello from Bootloader\r\n";
 /* USER CODE END PFP */
 
@@ -75,6 +76,7 @@ uint8_t supported_cmd[] = {
 		BL_GET_VER,
 		BL_GET_HELP,
 		BL_GET_CID,
+		BL_GET_RDP,
 		BL_JUMP_TO_APP
 };
 /* USER CODE END 0 */
@@ -226,6 +228,9 @@ void BL_uart_read_data(void){
 				break;
 			case BL_JUMP_TO_APP:
 				BL_handle_jump_to_app(bl_rx_buffer);
+				break;
+			case BL_GET_RDP:
+				BL_handle_getrdp_cmd(bl_rx_buffer);
 				break;
 		}
 	}
@@ -389,6 +394,34 @@ void BL_handle_jump_to_app(uint8_t *pBuffer)
 
 }
 
+void BL_handle_getrdp_cmd(uint8_t *pBuffer)
+{
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Get CHIP ID
+		uint8_t rdp = get_rdp_level();
+
+		// Send ACK
+		BL_send_ack(pBuffer[0], sizeof(supported_cmd));
+		BL_uart_write_data(&rdp,1);
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
+
+}
+
 
 uint16_t get_mcu_chip_id(void)
 {
@@ -396,6 +429,14 @@ uint16_t get_mcu_chip_id(void)
 	// This CID identifies the MCU part number and DIE revision.
 	cid = (uint16_t)(DBGMCU->IDCODE) & 0x0FFF;
 	return cid;
+}
+
+uint8_t get_rdp_level(void)
+{
+	uint8_t rdp_status = 0;
+	volatile uint32_t *pOB_addr = (uint32_t*) 0x1FFFC000;
+	rdp_status = (uint8_t)(*pOB_addr >> 8);
+	return rdp_status;
 }
 
 /**
