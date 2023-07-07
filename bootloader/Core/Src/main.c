@@ -74,7 +74,8 @@ uint8_t bl_rx_buffer[BL_RX_LEN];
 uint8_t supported_cmd[] = {
 		BL_GET_VER,
 		BL_GET_HELP,
-		BL_GET_CID
+		BL_GET_CID,
+		BL_JUMP_TO_APP
 };
 /* USER CODE END 0 */
 
@@ -223,6 +224,9 @@ void BL_uart_read_data(void){
 			case BL_GET_CID:
 				BL_handle_getcid_cmd(bl_rx_buffer);
 				break;
+			case BL_JUMP_TO_APP:
+				BL_handle_jump_to_app(bl_rx_buffer);
+				break;
 		}
 	}
 }
@@ -231,27 +235,22 @@ void BL_uart_read_data(void){
 void BL_jump_to_app(void)
 {
 	/* Function to hold the address of reset handler of the user app */
-	void (*app_reset_handler)(void);
+	typedef void (*app_reset_handler)(void);
 
-	print_debug_msg("BL_DEBUG_MSG -> Jump to user app\r\n");
+	/* Point to vector table (The start of the app) */
+	uint32_t *_vectable = (__IO uint32_t *) FLASH_APP_BASE_ADDRESS;
 
-	/* Main Stack Pointer */
-	uint32_t msp_value = *(volatile uint32_t *)FLASH_APP_BASE_ADDRESS;
+	/* Get the address of reset handler */
+	app_reset_handler app_jump = (app_reset_handler) *(_vectable + 1);
 
-	print_debug_msg("MSP Value -> %#x\n", msp_value);
+	/* SCB-VTOR : Pointer to vector table (Start of app) */
+	SCB->VTOR = _vectable;
 
-	__set_MSP(msp_value);
-
-	/* Reset handler will be the base address + 4 */
-	uint32_t reset_handler_address = *(volatile uint32_t *) (FLASH_APP_BASE_ADDRESS + 4);
-
-	app_reset_handler = (void*)reset_handler_address;
-
-	print_debug_msg("Reset handler value -> %#x\n",reset_handler_address);
+	/* Set main stack pointer */
+	__set_MSP(*_vectable);
 
 	/* Jumping to user application*/
-	app_reset_handler();
-
+	app_jump();
 
 }
 
@@ -360,6 +359,36 @@ void BL_handle_getcid_cmd(uint8_t *pBuffer)
 	}
 
 }
+
+void BL_handle_jump_to_app(uint8_t *pBuffer)
+{
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+		uint8_t z = 0;
+		// Send ACK
+		BL_send_ack(pBuffer[0], 1);
+		// Send 0 because we are jumping to app
+		BL_uart_write_data(&z,1);
+
+		// Jump and stop responding to BL
+		BL_jump_to_app();
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
+
+}
+
 
 uint16_t get_mcu_chip_id(void)
 {

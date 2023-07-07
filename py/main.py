@@ -24,6 +24,7 @@ COMMAND_BL_READ_SECTOR_P_STATUS                     =0x5A
 COMMAND_BL_OTP_READ                                 =0x5B
 COMMAND_BL_DIS_R_W_PROTECT                          =0x5C
 COMMAND_BL_MY_NEW_COMMAND                           =0x5D
+COMMAND_BL_JUMP_TO_APP                              =0x5E
 
 
 #len details of the command
@@ -38,6 +39,7 @@ COMMAND_BL_EN_R_W_PROTECT_LEN                       =8
 COMMAND_BL_READ_SECTOR_P_STATUS_LEN                 =6
 COMMAND_BL_DIS_R_W_PROTECT_LEN                      =6
 COMMAND_BL_MY_NEW_COMMAND_LEN                       =8
+COMMAND_BL_JUMP_TO_APP_LEN                          =6
 
 
 verbose_mode = 1
@@ -287,6 +289,14 @@ def process_COMMAND_BL_EN_R_W_PROTECT(length):
         print("\n   FAIL")
     else:
         print("\n   SUCCESS")
+
+def process_COMMAND_BL_JUMP_TO_APP(length):
+    ver=read_serial_port(1)
+    value = bytearray(ver)
+    if value[0] == 0:
+        print("\n   Bootloader Jumping to APP")
+    else:
+        print("\n   Bootloader response: ",hex(value[0]))
 
 
 
@@ -598,6 +608,25 @@ def decode_menu_command_code(command):
             Write_to_serial_port(i,COMMAND_BL_MY_NEW_COMMAND_LEN-1)
         
         ret_value = read_bootloader_reply(data_buf[1])
+    elif(command == 15):
+        print("\n   Command == > COMMAND_BL_JUMP_TO_APP ")
+        COMMAND_BL_JUMP_TO_APP_LEN              = 6
+        data_buf[0] = COMMAND_BL_JUMP_TO_APP_LEN-1 
+        data_buf[1] = COMMAND_BL_JUMP_TO_APP 
+        crc32       = get_crc(data_buf,COMMAND_BL_JUMP_TO_APP_LEN-4)
+        crc32 = crc32 & 0xffffffff
+        data_buf[2] = word_to_byte(crc32,1,1) 
+        data_buf[3] = word_to_byte(crc32,2,1) 
+        data_buf[4] = word_to_byte(crc32,3,1) 
+        data_buf[5] = word_to_byte(crc32,4,1) 
+
+        
+        Write_to_serial_port(data_buf[0],1)
+        for i in data_buf[1:COMMAND_BL_JUMP_TO_APP_LEN]:
+            Write_to_serial_port(i,COMMAND_BL_JUMP_TO_APP_LEN-1)
+        
+
+        ret_value = read_bootloader_reply(data_buf[1])
     else:
         print("\n   Please input valid command code\n")
         return
@@ -655,6 +684,9 @@ def read_bootloader_reply(command_code):
                 
             elif(command_code) == COMMAND_BL_MY_NEW_COMMAND:
                 process_COMMAND_BL_MY_NEW_COMMAND(len_to_follow)
+
+            elif(command_code) == COMMAND_BL_JUMP_TO_APP:
+                process_COMMAND_BL_JUMP_TO_APP(len_to_follow)
                 
             else:
                 print("\n   Invalid command code\n")
@@ -708,6 +740,7 @@ while True:
     print("   BL_OTP_READ                           --> 12")
     print("   BL_DIS_R_W_PROTECT                    --> 13")
     print("   BL_MY_NEW_COMMAND                     --> 14")
+    print("   BL_JUMP_TO_APP                        --> 15")
     print("   MENU_EXIT                             --> 0")
 
     #command_code = int(input("\n   Type the command code here :") )

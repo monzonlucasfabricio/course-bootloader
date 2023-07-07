@@ -56,9 +56,10 @@ typedef enum CRC_RET{
 #define FLASH_BL_BASE_ADDRESS 0x8000000U
 #define FLASH_APP_BASE_ADDRESS 0x8008000U
 
-#define BL_GET_VER 	0x51
-#define BL_GET_HELP 0x52
-#define BL_GET_CID	0x53
+#define BL_GET_VER 			0x51
+#define BL_GET_HELP 		0x52
+#define BL_GET_CID			0x53
+#define BL_JUMP_TO_APP		0x5E
 
 #define BL_ACK 	0xA5
 #define BL_NACK 0x7F
@@ -71,6 +72,7 @@ void Error_Handler(void);
 void BL_handle_getver_cmd(uint8_t *pBuffer);
 void BL_handle_gethelp_cmd(uint8_t *pBuffer);
 void BL_handle_getcid_cmd(uint8_t *pBuffer);
+void BL_handle_jump_to_app(uint8_t *pBuffer);
 void BL_send_ack(uint8_t cmd, uint8_t follow_len);
 void BL_send_nack(void);
 void BL_uart_write_data(uint8_t *pBuffer, uint32_t len);
