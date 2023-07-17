@@ -67,6 +67,7 @@ void Jump_To(uint32_t address);
 uint8_t get_rdp_level(void);
 uint8_t verify_address(uint32_t address);
 uint8_t execute_flash_erase(uint8_t sector_num, uint8_t n_sectors);
+uint8_t execute_mem_write(uint8_t *pBuffer, uint32_t address, uint32_t len);
 uint16_t get_mcu_chip_id(void);
 char somedata[] = "Hello from Bootloader\r\n";
 /* USER CODE END PFP */
@@ -82,6 +83,7 @@ uint8_t supported_cmd[] = {
 		BL_GET_RDP,
 		BL_GO_TO,
 		BL_FLASH_ERASE,
+		BL_WRITE_MEM,
 		BL_JUMP_TO_APP
 };
 /* USER CODE END 0 */
@@ -242,6 +244,9 @@ void BL_uart_read_data(void){
 				break;
 			case BL_FLASH_ERASE:
 				BL_handle_flash_erase_cmd(bl_rx_buffer);
+				break;
+			case BL_WRITE_MEM:
+				BL_handle_write_mem_cmd(bl_rx_buffer);
 				break;
 		}
 	}
@@ -462,7 +467,7 @@ void BL_handle_go_cmd(uint8_t *pBuffer)
 		address = *((uint32_t *) &pBuffer[2]);
 		print_debug_msg("BL_DEBUG_MSG: Go address -> %#x\n",address);
 
-		if (verify_address(address)){
+		if (!verify_address(address)){
 			// Send ACK
 			print_debug_msg("BL_DEBUG_MSG: Address is valid \n");
 			BL_send_ack(pBuffer[0], sizeof(supported_cmd));
@@ -515,6 +520,70 @@ void BL_handle_flash_erase_cmd(uint8_t *pBuffer)
 		BL_send_nack();
 	}
 
+}
+
+
+// Length to follow 	=> pBuffer[0]
+// ----------------
+// Command code			=> pBuffer[1]
+// ----------------
+// Base Memory Address 	=> pBuffer[2] -> 4 bytes
+// ----------------
+// Payload Length		=> pBuffer[6] 
+// ----------------
+// Payload				=> pBuffer[7]
+// ----------------
+// CRC
+void BL_handle_write_mem_cmd(uint8_t *pBuffer)
+{
+	uint32_t address;
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	uint8_t len = pBuffer[0];
+	uint8_t payload_len = pBuffer[6];
+	address = *((uint32_t *) &pBuffer[2]);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Send ACK
+		BL_send_ack(pBuffer[0], sizeof(supported_cmd));
+		
+		if (!verify_address(address))
+		{
+			status = execute_mem_write(&pBuffer[7], address, payload_len);
+		}
+		// Send the status from writing the memory
+		BL_uart_write_data(&status,1);
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		status = ADDR_INVALID;
+		BL_uart_write_data(&status,1);
+	}
+
+}
+
+uint8_t execute_mem_write(uint8_t *pBuffer, uint32_t address, uint32_t len)
+{
+	uint8_t status = HAL_OK;
+
+	HAL_FLASH_Unlock();
+
+	for (uint32_t i = 0; i < len; i++)
+	{
+		status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, address + i, pBuffer[i]);
+	}
+
+	HAL_FLASH_Lock();
+
+	return status;
 }
 
 uint8_t execute_flash_erase(uint8_t sector_num, uint8_t n_sectors)
@@ -570,12 +639,12 @@ uint8_t verify_address(uint32_t address)
 	 */
 	if (address >= FLASH_BL_BASE_ADDRESS && address <= FLASH_END_ADDR)
 	{
-		return 1;
+		return ADDR_VALID;
 	}
 	else if (address >= RAM_START_ADDR && address <= RAM_END_ADDR){
-		return 1;
+		return ADDR_VALID;
 	}
-	return 0;
+	return ADDR_INVALID;
 }
 
 uint16_t get_mcu_chip_id(void)

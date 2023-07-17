@@ -67,12 +67,15 @@ typedef enum CRC_RET{
 #define BL_GET_RDP			0x54
 #define BL_GO_TO			  0x55
 #define BL_FLASH_ERASE  0x56
+#define BL_WRITE_MEM    0x57
 #define BL_JUMP_TO_APP	0x5E
 
 
 #define BL_ACK 	0xA5
 #define BL_NACK 0x7F
 
+#define ADDR_INVALID 1
+#define ADDR_VALID 0
 #define FLASH_INVALID_SECTOR 1
 #define FLASH_MAX_SECTORS 8
 /* USER CODE END EM */
