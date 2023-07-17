@@ -63,10 +63,11 @@ void SystemClock_Config(void);
 static void print_debug_msg(char *format,...);
 void BL_uart_read_data(void);
 void BL_jump_to_app(void);
-uint16_t get_mcu_chip_id(void);
+void Jump_To(uint32_t address);
 uint8_t get_rdp_level(void);
 uint8_t verify_address(uint32_t address);
-void Jump_To(uint32_t address);
+uint8_t execute_flash_erase(uint8_t sector_num, uint8_t n_sectors);
+uint16_t get_mcu_chip_id(void);
 char somedata[] = "Hello from Bootloader\r\n";
 /* USER CODE END PFP */
 
@@ -80,6 +81,7 @@ uint8_t supported_cmd[] = {
 		BL_GET_CID,
 		BL_GET_RDP,
 		BL_GO_TO,
+		BL_FLASH_ERASE,
 		BL_JUMP_TO_APP
 };
 /* USER CODE END 0 */
@@ -237,6 +239,9 @@ void BL_uart_read_data(void){
 				break;
 			case BL_GO_TO:
 				BL_handle_go_cmd(bl_rx_buffer);
+				break;
+			case BL_FLASH_ERASE:
+				BL_handle_flash_erase_cmd(bl_rx_buffer);
 				break;
 		}
 	}
@@ -475,6 +480,75 @@ void BL_handle_go_cmd(uint8_t *pBuffer)
 		BL_send_nack();
 	}
 
+}
+
+
+void BL_handle_flash_erase_cmd(uint8_t *pBuffer)
+{
+	HAL_StatusTypeDef status;
+
+	// Get total length of cmd packet
+	uint32_t cmd_packet_len = pBuffer[0] + 1;
+
+	// Get Host CRC
+	uint32_t host_crc = get_host_crc(pBuffer);
+
+	// Check the CRC
+	if (!BL_verify_crc(&pBuffer[0], cmd_packet_len-4, host_crc))
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC success\n");
+
+		// Send ACK
+		BL_send_ack(pBuffer[0], sizeof(supported_cmd));
+		
+		// pBuffer[2] => Sector Number
+		// pBuffer[3] => Number of Sectors
+		status = execute_flash_erase(pBuffer[2], pBuffer[3]);
+		print_debug_msg("BL_DEBUG_MSG: Flash Erase Status: %#x \n",status);
+
+		// Send the status from erasing the flash
+		BL_uart_write_data(&status,1);
+	}
+	else
+	{
+		print_debug_msg("BL_DEBUG_MSG: CRC Failed\n");
+		BL_send_nack();
+	}
+
+}
+
+uint8_t execute_flash_erase(uint8_t sector_num, uint8_t n_sectors)
+{
+	FLASH_EraseInitTypeDef erase_struct;
+	uint32_t sectorError;
+	HAL_StatusTypeDef status;
+
+	if (n_sectors > 8) return INVALID_SECTOR;
+	if ((sector_num == 0xFF) || (sector_num <= 7))
+	{
+		if (sector_num == (uint8_t) 0xFF)
+		{
+			erase_struct.TypeErase = FLASH_TYPEERASE_MASSERASE;
+		}
+		else
+		{
+			uint8_t remaining_sector = FLASH_MAX_SECTORS - sector_num;
+			if (n_sectors > remaining_sector) n_sectors = remaining_sector;
+			erase_struct.TypeErase = FLASH_TYPEERASE_SECTORS;
+			erase_struct.Sector = sector_num;
+			erase_struct.NbSectors = n_sectors;
+		}
+		erase_struct.Banks = FLASH_BANK_1;
+
+		HAL_FLASH_Unlock();
+		erase_struct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+		status = (uint8_t) HAL_FLASHEx_Erase(&erase_struct, &sectorError);
+		HAL_FLASH_Lock();
+
+		return status;
+	}
+
+	return FLASH_INVALID_SECTOR;
 }
 
 void Jump_To(uint32_t address)

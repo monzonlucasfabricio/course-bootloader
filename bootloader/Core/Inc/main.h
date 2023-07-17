@@ -65,11 +65,16 @@ typedef enum CRC_RET{
 #define BL_GET_HELP 		0x52
 #define BL_GET_CID			0x53
 #define BL_GET_RDP			0x54
-#define BL_GO_TO			0x55
-#define BL_JUMP_TO_APP		0x5E
+#define BL_GO_TO			  0x55
+#define BL_FLASH_ERASE  0x56
+#define BL_JUMP_TO_APP	0x5E
+
 
 #define BL_ACK 	0xA5
 #define BL_NACK 0x7F
+
+#define FLASH_INVALID_SECTOR 1
+#define FLASH_MAX_SECTORS 8
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -82,6 +87,7 @@ void BL_handle_getcid_cmd(uint8_t *pBuffer);
 void BL_handle_jump_to_app(uint8_t *pBuffer);
 void BL_handle_getrdp_cmd(uint8_t *pBuffer);
 void BL_handle_go_cmd(uint8_t *pBuffer);
+void BL_handle_flash_erase_cmd(uint8_t *pBuffer)
 void BL_send_ack(uint8_t cmd, uint8_t follow_len);
 void BL_send_nack(void);
 void BL_uart_write_data(uint8_t *pBuffer, uint32_t len);
